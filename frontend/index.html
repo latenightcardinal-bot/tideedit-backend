@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI Video Editor</title>
+</head>
+<body>
+
+<h1>🎬 AI Video Editor</h1>
+
+<!-- 🎬 UPLOAD SYSTEM -->
+<input type="file" id="file"><br><br>
+
+<input type="text" id="effects" placeholder="blur,grayscale,speed"><br><br>
+
+<input type="number" id="start" placeholder="Start time (sec)">
+<input type="number" id="end" placeholder="End time (sec)"><br><br>
+
+<button onclick="upload()">Process Video</button>
+
+<p id="status"></p>
+
+<video id="preview" controls width="500" style="margin-top:20px;"></video>
+
+<hr>
+
+<!-- 🧠 LENS AI -->
+<h2>🧠 LENS AI</h2>
+
+<input type="text" id="lensUrl" placeholder="Paste TikTok / YouTube / Instagram link"><br><br>
+<button onclick="runLens()">Analyze with Lens</button>
+
+<pre id="lensOutput"></pre>
+
+<hr>
+
+<!-- 🔴 LIVE AI -->
+<h2>🔴 LIVE AI EDITOR</h2>
+
+<button onclick="runLiveAI()">Analyze Timeline Live</button>
+
+<pre id="liveOutput"></pre>
+
+<hr>
+
+<!-- 🌍 YARD (OPTION A COMPLETED) -->
+<h2>🌍 YARD CREATOR FEED</h2>
+
+<input type="text" id="username" placeholder="Creator name"><br><br>
+
+<textarea id="postContent" placeholder="Share an edit tip, idea, or breakdown..." rows="3" cols="40"></textarea><br><br>
+
+<button onclick="createPost()">Post to Yard</button>
+
+<button onclick="loadFeed()">Refresh Feed</button>
+
+<div id="feed"></div>
+
+<script>
+
+let currentProjectId = null;
+
+// ========================
+// 🎬 UPLOAD SYSTEM
+// ========================
+async function upload() {
+
+    const fileInput = document.getElementById("file");
+
+    if (!fileInput.files.length) {
+        alert("Select a video first");
+        return;
+    }
+
+    const status = document.getElementById("status");
+    status.innerText = "Creating project...";
+
+    try {
+
+        if (!currentProjectId) {
+            const res = await fetch("http://127.0.0.1:8000/project/create", {
+                method: "POST"
+            });
+
+            const data = await res.json();
+            currentProjectId = data.project_id;
+        }
+
+        status.innerText = "Uploading...";
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+        formData.append("bin_name", "A_ROLL");
+
+        const uploadRes = await fetch(
+            `http://127.0.0.1:8000/project/${currentProjectId}/upload`,
+            { method: "POST", body: formData }
+        );
+
+        const uploadData = await uploadRes.json();
+
+        status.innerText = "Adding to timeline...";
+
+        const timelineData = new FormData();
+        timelineData.append("file_id", uploadData.file_id);
+
+        await fetch(
+            `http://127.0.0.1:8000/project/${currentProjectId}/timeline`,
+            { method: "POST", body: timelineData }
+        );
+
+        status.innerText = "Rendering...";
+
+        const renderRes = await fetch(
+            `http://127.0.0.1:8000/project/${currentProjectId}/render`,
+            { method: "POST" }
+        );
+
+        const blob = await renderRes.blob();
+        const url = URL.createObjectURL(blob);
+
+        const video = document.getElementById("preview");
+        video.src = url;
+        video.load();
+        video.play();
+
+        status.innerText = "Done ✅";
+
+    } catch (err) {
+        console.error(err);
+        status.innerText = "Error ❌";
+    }
+}
+
+
+// ========================
+// 🧠 LENS AI
+// ========================
+async function runLens() {
+
+    if (!currentProjectId) {
+        alert("Upload first");
+        return;
+    }
+
+    const url = document.getElementById("lensUrl").value;
+    const output = document.getElementById("lensOutput");
+
+    output.innerText = "Analyzing...";
+
+    const formData = new FormData();
+    formData.append("url", url);
+
+    const res = await fetch(
+        `http://127.0.0.1:8000/project/${currentProjectId}/lens/analyze`,
+        { method: "POST", body: formData }
+    );
+
+    const data = await res.json();
+    output.innerText = JSON.stringify(data, null, 2);
+}
+
+
+// ========================
+// 🔴 LIVE AI SYSTEM
+// ========================
+async function runLiveAI() {
+
+    if (!currentProjectId) {
+        alert("Create project first");
+        return;
+    }
+
+    const output = document.getElementById("liveOutput");
+    output.innerText = "Analyzing...";
+
+    const res = await fetch(
+        `http://127.0.0.1:8000/project/${currentProjectId}/live/analyze`,
+        { method: "POST" }
+    );
+
+    const data = await res.json();
+    output.innerText = JSON.stringify(data, null, 2);
+}
+
+
+// ========================
+// 🌍 YARD SYSTEM (OPTION A)
+// ========================
+
+// 📤 CREATE POST
+async function createPost() {
+
+    const user = document.getElementById("username").value;
+    const content = document.getElementById("postContent").value;
+
+    if (!user || !content) {
+        alert("Enter name + content");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("user", user);
+    formData.append("content", content);
+
+    await fetch("http://127.0.0.1:8000/yard/post", {
+        method: "POST",
+        body: formData
+    });
+
+    document.getElementById("postContent").value = "";
+    loadFeed();
+}
+
+
+// 📡 LOAD FEED
+async function loadFeed() {
+
+    const res = await fetch("http://127.0.0.1:8000/yard/feed");
+    const data = await res.json();
+
+    const feed = document.getElementById("feed");
+    feed.innerHTML = "";
+
+    data.feed.forEach(post => {
+
+        const div = document.createElement("div");
+        div.style.border = "1px solid #ccc";
+        div.style.padding = "10px";
+        div.style.margin = "10px 0";
+
+        div.innerHTML = `
+            <b>${post.user}</b><br>
+            ${post.content}<br><br>
+            ❤️ ${post.likes}
+            <button onclick="likePost('${post.id}')">Like</button>
+        `;
+
+        feed.appendChild(div);
+    });
+}
+
+
+// ❤️ LIKE POST
+async function likePost(id) {
+
+    await fetch(`http://127.0.0.1:8000/yard/like/${id}`, {
+        method: "POST"
+    });
+
+    loadFeed();
+}
+
+</script>
+
+</body>
+</html>
