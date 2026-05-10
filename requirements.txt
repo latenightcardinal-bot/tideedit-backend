@@ -1,5 +1,10 @@
 fastapi
 uvicorn
-moviepy
-opencv-python
 python-multipart
+moviepy==1.0.3
+opencv-python
+numpy
+python-dotenv
+imageio
+imageio-ffmpeg
+pillow
